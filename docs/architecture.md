@@ -2,6 +2,8 @@
 
 ```text
 config/              环境和设备配置
+api/http/            HTTP 方法、路径及请求定义
+api/websocket/       WS 指令和请求结构
 tests/http/          HTTP 接口的各类具名测试
 tests/websocket/     WS 接口的各类具名测试
 tests/workflows/     一个函数内按顺序表达跨接口业务流程
@@ -14,9 +16,11 @@ artifacts/           报告、完整流量、源码快照
 
 ## 可见的业务步骤
 
-HTTP 直接 `await http.get/post(...)`，返回 HTTPX Response；WS 直接 `await ws.request({...})`，返回原始业务字典。公共通信不要求业务一定成功，不拦截接口参数的负数、小数。业务成功/拒绝由 case 断言。
+用例调用 `device_api.get_device_list()`、`hdmi_api.set_volume()`、`query_state()` 和 `session_api.login()`。HTTP API 返回完整 HTTPX Response；WS API 返回原始业务字典。API 定义方法、路径、指令和请求结构，不判断业务成功，不拦截负数、小数或空值。
 
-HDMI case 明确展示控制请求、回包断言、状态等待、主动查询、状态及其他通道断言。原 DeviceClient/set_volume 的自动成功闭环不再作为用例入口。
+调用链为：测试/流程 → API → 公共 HTTP/WS 通信。API 不执行隐藏的状态等待、主动查询或断言；需要等推送时，用例明确调用 ws.wait_for_state。
+
+HDMI case 明确展示控制请求、回包断言、状态等待、主动查询、状态及其他通道断言。set_volume 现在只表示一个接口请求，不再包办成功闭环。
 
 HTTP 支持 headers/cookies/params/json/data；WS 支持配置握手 headers/cookies，当前已采集协议另使用业务 JSON token/sign 登录。不得把 HTTP 握手和业务 login 混为一谈。
 
@@ -30,7 +34,7 @@ WS 连接失效后不重放请求。若有不确定控制，重新登录后必�
 
 ## 关联流程
 
-一个流程函数显式调用多个接口、断言上游、提取返回值并传给下游。普通 Python 变量就是步骤上下文，不使用全局变量或依赖测试执行顺序。不新建 YAML 流程引擎。
+一个流程函数通过 API 显式调用多个接口、断言上游、提取返回值并传给下游。普通 Python 变量就是步骤上下文，不使用全局变量或依赖测试执行顺序。不新建 YAML 流程引擎。
 
 本次真实协议示例是 HTTP 查找目标 MAC → WS 使用该 MAC 登录 → 控制 HDMI → 验证状态。尚未取得创建/删除接口协议，不虚构接口；未来资源创建后应立即登记 fixture 清理，流程结束按依赖反序清理。
 

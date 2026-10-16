@@ -8,9 +8,12 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from api.http.device_list import DeviceListApi
+from api.websocket.hdmi import HdmiApi
+from api.websocket.session import SessionApi
 from common.evidence import Evidence
 from common.http_client import HttpClient
-from common.setup import read_state, restore_hdmi, verify_device
+from common.setup import connect_ws, read_state, restore_hdmi, verify_device
 from common.websocket_client import WebSocketClient
 from config.settings import load_settings
 from mocks.device_server import MockDevice
@@ -118,7 +121,7 @@ async def ws_connection(http_connection, connection_settings, interface_evidence
             await current.close()
         await verify_device(http_connection, connection_settings)
         current = WebSocketClient(connection_settings, interface_evidence)
-        await current.open()
+        await connect_ws(current)
         if needs_recovery:
             state = await read_state(current)
             if reference is None or type(state.get("HDMI_audio_status")) is not int or state["HDMI_audio_status"] != reference:
@@ -181,7 +184,28 @@ async def isolated_ws(isolated_http, connection_settings, interface_evidence):
     await verify_device(isolated_http, connection_settings)
     connection = WebSocketClient(connection_settings, interface_evidence)
     try:
-        await connection.open()
+        await connect_ws(connection)
         yield connection
     finally:
         await connection.close()
+
+
+@pytest.fixture
+def device_api(http):
+    """给用例提供设备列表接口，复用当前 case 的 HTTP 会话。"""
+
+    return DeviceListApi(http)
+
+
+@pytest.fixture
+def hdmi_api(ws):
+    """给用例提供 HDMI 接口，不改变连接及状态恢复的生命周期。"""
+
+    return HdmiApi(ws)
+
+
+@pytest.fixture
+def session_api(ws):
+    """关联流程可显式调用登录或设备信息接口。"""
+
+    return SessionApi(ws)

@@ -1,16 +1,17 @@
-# 云控接口自动化：环境＋接口＋数据
+# 云控接口自动化：环境＋API＋用例＋数据
 
-用例直接发送 HTTP/WS 请求并断言响应；环境、数据和前后置各自维护。默认本地模拟，实际设备必须显式 `-Live`。
+API 单独定义 HTTP/WS 请求；用例调用 API 展示业务步骤并断言响应。环境、数据和前后置各自维护。默认本地模拟，实际设备必须显式 `-Live`。
 
-## 日常只看三处
+## 日常维护入口
 
 | 要做的事 | 位置 |
 |---|---|
 | 选择环境、设备和公共设置 | config/environments、config/devices |
-| 查看请求和验证过程 | tests/http、tests/websocket |
+| 定义 HTTP 路径、WS 指令和请求结构 | api/http、api/websocket |
+| 编写业务流和断言 | tests/http、tests/websocket、tests/workflows |
 | 增加某接口的输入和预期 | data/http、data/websocket |
 
-先看 [HDMI 脚本](tests/websocket/test_hdmi_volume.py) 和 [对应数据](data/websocket/hdmi_volume.json)。HTTP 示例是 [设备列表](tests/http/test_device_list.py)，关联流程在 [workflows](tests/workflows/test_hdmi_control_flow.py)。
+先看 [HDMI API](api/websocket/hdmi.py)，再看 [HDMI 脚本](tests/websocket/test_hdmi_volume.py) 和 [对应数据](data/websocket/hdmi_volume.json)。HTTP 示例是 [设备列表](tests/http/test_device_list.py)，关联流程在 [workflows](tests/workflows/test_hdmi_control_flow.py)。
 
 ## 运行
 
@@ -54,7 +55,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run-tests.ps1 -Protocol we
 
 ## 测试数据
 
-每个接口文件有对应 JSON，按 `normal`、`rejected`、`special` 等类别分组。每类写一个具名测试函数，再通过 `@pytest.mark.parametrize` 显式加载该组数据。每条记录包含唯一 id、request 和 expected。
+每个接口测试文件有对应 JSON，按 `normal`、`rejected`、`special` 等类别分组。每类写一个具名测试函数，再通过 `@pytest.mark.parametrize` 显式加载该组数据。每条记录包含唯一 id、request 和 expected。
 
 当前正式 HDMI 数据只有音量 10。0、1、99、100、101、-1、1.5 的业务预期尚未全部确认；不把模拟器的接受行为当作真实协议边界。框架测试会在模拟器中验证负数、小数不被客户端提前拦截。
 

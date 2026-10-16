@@ -1,4 +1,4 @@
-"""设备列表接口：请求路径、参数和断言都在此处可见。"""
+"""设备列表用例：通过 API 调用接口，明确展示业务验证。"""
 
 import pytest
 from common.data_loader import load_cases
@@ -7,10 +7,10 @@ pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.normal]
 
 
 @pytest.mark.parametrize("case", load_cases("http/device_list.json", "normal"), ids=lambda case: case["id"])
-async def test_get_device_list(http, settings, case):
+async def test_get_device_list(device_api, settings, case):
     """验证列表接口成功，并返回唯一、型号正确且在线的目标设备。"""
 
-    response = await http.get("/api/educontrol/lists", params=case["request"]["params"])
+    response = await device_api.get_device_list(params=case["request"]["params"])
 
     # 验证 HTTP 状态及业务成功字段。
     assert response.status_code == case["expected"]["status_code"]

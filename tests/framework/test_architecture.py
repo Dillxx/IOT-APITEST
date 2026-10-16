@@ -1,4 +1,4 @@
-"""公共通信不得反向依赖测试和模拟服务，避免接口层再次形成多层循环调用。"""
+"""API、公共功能和配置不依赖测试或模拟服务。"""
 
 import ast
 from pathlib import Path
@@ -9,7 +9,7 @@ def test_common_code_does_not_import_tests_or_mocks():
 
     root = Path(__file__).resolve().parents[2]
     violations = []
-    for folder in ("common", "config"):
+    for folder in ("api", "common", "config"):
         for file in (root / folder).rglob("*.py"):
             tree = ast.parse(file.read_text(encoding="utf-8"))
             for node in ast.walk(tree):

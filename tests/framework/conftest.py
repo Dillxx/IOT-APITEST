@@ -8,7 +8,7 @@ import pytest_asyncio
 
 from common.evidence import Evidence
 from common.http_client import HttpClient
-from common.setup import verify_device
+from common.setup import connect_ws, verify_device
 from common.websocket_client import WebSocketClient
 from mocks.device_server import MockDevice
 
@@ -45,7 +45,7 @@ async def session_factory(settings, evidence):
             ws.simulator = simulator
             ws.http = http
             resources.push_async_callback(ws.close)
-            await ws.open()
+            await connect_ws(ws)
             return ws
 
         yield create

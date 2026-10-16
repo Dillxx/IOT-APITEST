@@ -1,49 +1,42 @@
-# 接口组织重构验收
+# API 与用例分离验收
 
-日期：2026-10-16。Python 3.12.14、pytest 9.1.1，依赖锁未改变。本次只使用本地模拟，没有执行真机控制。
+日期：2026-10-16。API 单独定义，用例及关联流程调用 API 展示业务步骤，断言保留在测试中。仅使用本地模拟，未运行实际设备。
 
-## 结果
+## 改动
+
+- api/http/device_list.py：定义设备列表的 HTTP 方法和路径，返回完整 HTTPX Response。
+- api/websocket/hdmi.py：定义控制和状态查询请求，返回实际业务回包。
+- api/websocket/session.py：定义业务登录及设备信息请求，供前置和关联流程复用。
+- 用例移除请求路径和 actioncode，明确调用 API；状态等待和断言仍可见。
+- 登录、身份核对、原状态读取和恢复由前置辅助通过 API 执行，公共通信不导入 API。
+- 数据结构、case ID、执行选项、共享连接与逐条恢复策略均保持。
+
+## 验证
 
 | 检查 | 结果 |
 |---|---|
-| 重构前基线 | 22 passed |
-| 统一 run-tests.ps1 完整入口 | 53 passed |
-| Python 开发模式、asyncio 调试 | 53 passed |
-| 实际脚本：环境＋协议＋类别＋数据 ID | 1 passed |
-| 实际脚本：HTTP/WS 多文件＋多个 ID | 2 passed |
-| 实际脚本：显式配置文件＋混合流程 | 1 passed |
-| pip check | No broken requirements found |
-| 中文注释和三引号说明排版 | 29 个 Python 文件检查通过 |
-| 旧模块导入、四种调试配置路径 | 检查通过 |
-| HDMI/关联流程的实际请求证据 | 发送 10 后恢复 30，恢复检查点存在 |
-| HTTP 到 WS 的结果传递 | 流程中实际使用 HTTP 返回的 MAC 发出 WS 登录 |
+| 修改前基线 | 53 passed |
+| 修改后完整回归 | 59 passed |
+| 开发模式、asyncio 调试 | 59 passed |
+| 统一脚本 -Category normal | HTTP、WS、关联流程共 3 passed |
+| API 拒绝回包和负数/小数/空值输入 | 4 项模拟回归通过 |
+| API 不隐藏查询、不自动断言确认值或状态值 | 通过 |
+| HTTP API 返回实际错误响应、透传请求选项 | 通过 |
+| 正式 HDMI 与关联流程的业务请求序列 | 与前版一致，包含设置 10 与恢复 30 |
+| 中文注释、三引号说明排版 | 36 个 Python 文件静态检查通过 |
+| 依赖检查 | No broken requirements found，锁文件不变 |
 
-53 项包含 3 条正式接口/流程用例和 50 项框架回归，不表示增加了 53 条业务协议预期。
+59 项包含 3 条正式接口/流程用例与 56 项框架回归。额外 6 项只验证 API 边界，不新增或推断真实设备的非法输入预期。
 
-## 关键回归
+## 报告与回退依据
 
-- 同接口两组数据复用一个 HTTP/WS 连接，每组分别恢复原音量；默认 cookie/header 修改不会影响下一组。
-- 控制确认与状态推送可乱序，旧回包不能满足新请求，日志和心跳不会被错误消费。
-- 拒绝回包、HTTP 4xx/5xx 原样返回给用例；模拟负数、小数仅验证公共层不擅自拦截输入。
-- 业务断言失败后恢复；恢复拒绝明确报告并关闭资源。
-- 不确定控制后重连，仅原状态一致才允许后续 case；状态已改变时不自动恢复或重发。
-- 独立特殊连接关闭不破坏普通共享连接；握手 cookies/headers 与业务凭据脱敏。
-- 协议、文件、类别、精确 ID、多 ID、环境冲突、无匹配、旧参数和缺失凭据均验证。
+- [完整报告](../artifacts/api-separation-validation/full.xml)
+- [asyncio 调试报告](../artifacts/api-separation-validation/debug.xml)
+- [正式接口与流程报告](../artifacts/20261016-141431-3ca959c2/junit.xml)
+- [本次验收汇总](../artifacts/api-separation-validation/summary.json)
+- [本次源码快照](../artifacts/before-api-separation-20261016-141000.zip)
+- [前次整体目录重构验收汇总](../artifacts/interface-refactor-validation/summary.json)
 
-## 可追溯报告
+完整回归的请求日志目录：`artifacts/20261016-141313-41ab7ada`。
 
-完整报告：[junit.xml](../artifacts/20261016-120048-bd3b4858/junit.xml)。
-
-调试模式：[asyncio-debug.xml](../artifacts/interface-refactor-validation/asyncio-debug.xml)。
-
-多接口：[junit.xml](../artifacts/20261016-120213-2a2bea09/junit.xml)。
-
-验收汇总：[summary.json](../artifacts/interface-refactor-validation/summary.json)。
-
-修改前源码快照：[ZIP](../artifacts/before-interface-refactor-20261016-114629.zip)。原历史报告及早期快照均保留。
-
-## 待确认边界
-
-正式 HDMI 数据仍为音量 10。0、1、99、100、101、-1、1.5 等的真实接受、拒绝、限幅或取整规则未全部确认，本次未据模拟器补造正式预期。
-
-自动账号登录、有效凭据获取、真机物理声音效果、服务器到终端 TCP 行为未验证。当前业务 JSON 登录沿用已采集协议。
+当前正式 HDMI 数据仍仅为音量 10；其他输入的真实成功、拒绝、限幅或取整规则仍待确认。物理声音、真机执行和服务器到终端 TCP 未验证。

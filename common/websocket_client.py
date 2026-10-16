@@ -1,4 +1,4 @@
-"""WebSocket 请求、业务登录和心跳集中处理。
+"""WebSocket 请求、接收、匹配和心跳集中处理。
 每条连接只有一个接收任务；等待者读取共享历史，不各自 recv；业务断言留在用例。
 """
 
@@ -78,7 +78,7 @@ class WebSocketClient:
         return self.sequence
 
     async def open(self):
-        """建立连接、启动后台任务，并执行环境对应的业务登录和身份核对。"""
+        """建立连接并启动后台任务；业务登录及身份核对由前置管理。"""
 
         if self.socket is not None:
             raise RuntimeError("Session already opened")
@@ -92,21 +92,6 @@ class WebSocketClient:
         # 启动后台接收任务；主用例仍可继续发送指令和等待结果。
         self.reader = asyncio.create_task(self._receive(), name="iot-ws-reader")
         self.heartbeat = asyncio.create_task(self._keep_alive(), name="iot-business-heartbeat")
-        try:
-            login = await self.request({"actioncode": "login", "data": self.settings.mac})
-            if login.get("return") != 0:
-                raise AssertionError("WebSocket login rejected")
-            info = await self.request({"actioncode": "push_control_info", "data": ""})
-            if info.get("return") != 0:
-                raise AssertionError("WebSocket device information rejected")
-            data = info.get("data", {})
-            if data.get("mac", "").lower() != self.settings.mac.lower():
-                raise AssertionError("WebSocket connection target MAC mismatch")
-            if data.get("device_type") != self.settings.model:
-                raise AssertionError("WebSocket connection target model mismatch")
-        except BaseException:
-            await self.close()
-            raise
 
     async def send(self, body: dict):
         """将已构造的字典编码为 JSON 并发送；发送异常时通知等待者，避免继续等待。"""

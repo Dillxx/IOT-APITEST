@@ -8,11 +8,10 @@ pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.normal,
 
 
 @pytest.mark.parametrize("case", load_cases("websocket/hdmi_volume.json", "normal"), ids=lambda case: case["id"])
-async def test_set_volume_success(ws, case):
+async def test_set_volume_success(hdmi_api, ws, case):
     """多组正常数据复用相同操作与断言，每条都有独立准备和恢复。"""
 
-    request_data = {"actioncode": "execute_HDMI_Audio_Control", **case["request"]}
-    response = await ws.request(request_data)
+    response = await hdmi_api.set_volume(volume=case["request"]["data"])
 
     # 验证控制回包，不由公共请求方法替用例判断业务成功。
     assert response["return"] == case["expected"]["return"]
@@ -21,7 +20,7 @@ async def test_set_volume_success(ws, case):
 
     # 等待状态推送，再发起一次主动查询复核。
     await ws.wait_for_state(case["expected"]["state"])
-    state_response = await ws.request({"actioncode": "edudevice_get_state", "data": "get_state"})
+    state_response = await hdmi_api.query_state()
     assert state_response["return"] == 0
     state = state_response["data"]
     assert type(state["HDMI_audio_status"]) is int
