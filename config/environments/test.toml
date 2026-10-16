@@ -1,6 +1,6 @@
 [server]
-http_base_url = "http://172.16.48.215"
-ws_url = "ws://172.16.48.215:7578/"
+http_base_url = "http://172.16.48.230"
+ws_url = "ws://172.16.48.230:7578/"
 
 [device]
 config_file = "../devices/ts9220.toml"
@@ -22,4 +22,10 @@ history_limit = 2000
 
 [execution]
 restore_original = true
+
+[auth]
+mode = "login"
+platform = "home"
+account_file = "../accounts.local.toml"
+account = "admin"
 

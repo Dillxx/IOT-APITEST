@@ -1,0 +1,30 @@
+[server]
+http_base_url = "http://172.16.48.230"
+ws_url = "ws://172.16.48.230:7578/"
+
+[device]
+config_file = "../devices/ts9260.toml"
+
+[protocol]
+company = "BL"
+device_name = "edu"
+http_device_name = "TE-0600R"
+platform = "manage"
+lang = "zh-cn"
+
+[timeouts]
+connect = 10.0
+http = 10.0
+reply = 5.0
+state = 10.0
+heartbeat_interval = 5.0
+history_limit = 2000
+
+[execution]
+restore_original = true
+
+[auth]
+mode = "login"
+platform = "home"
+account_file = "../accounts.local.toml"
+account = "admin"

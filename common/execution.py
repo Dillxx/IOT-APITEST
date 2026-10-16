@@ -7,6 +7,7 @@ from pathlib import Path
 import uuid
 
 import pytest
+from config.settings import load_settings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,6 +18,7 @@ def pytest_addoption(parser):
     parser.addoption("--env", default=None, help="Environment name, default: test")
     parser.addoption("--iot-config", default=None, help="Explicit environment TOML path")
     parser.addoption("--live", action="store_true", help="Enable real device access explicitly")
+    parser.addoption("--auth-har", default=None, help="Removed: configure local account credentials")
     parser.addoption("--protocol", choices=("http", "websocket"), default=None)
     parser.addoption("--category", choices=("normal", "rejected", "special"), default=None)
     parser.addoption("--case-id", action="append", default=[], help="Exact data id; can be repeated")
@@ -29,6 +31,8 @@ def pytest_configure(config):
 
     if config.getoption("--iot-data") is not None or "IOT_HDMI_VOLUME" in os.environ:
         raise pytest.UsageError("--iot-data/IOT_HDMI_VOLUME were removed; edit data/<protocol>/<interface>.json and select --case-id")
+    if config.getoption("--auth-har") is not None or "IOT_AUTH_HAR" in os.environ:
+        raise pytest.UsageError("HAR login input was removed; configure config/accounts.local.toml or IOT_USERNAME/IOT_PASSWORD")
     if config.getoption("--env") and config.getoption("--iot-config"):
         raise pytest.UsageError("--env and --iot-config cannot be combined")
     name = config.getoption("--env") or "test"
@@ -39,8 +43,12 @@ def pytest_configure(config):
     if not config.iot_config_path.is_file():
         raise pytest.UsageError(f"Environment file not found: {config.iot_config_path}")
     if config.getoption("--live"):
-        if not os.environ.get("IOT_TOKEN") or not os.environ.get("IOT_SIGN"):
-            raise pytest.UsageError("--live requires IOT_TOKEN and IOT_SIGN; no network operation was started")
+        settings = load_settings(config.iot_config_path)
+        if settings.auth_mode == "login":
+            if not settings.login_username or not settings.login_password:
+                raise pytest.UsageError("Live login requires config/accounts.local.toml or IOT_USERNAME/IOT_PASSWORD; no network operation was started")
+        elif not settings.token or not settings.sign:
+            raise pytest.UsageError("--live requires IOT_TOKEN and IOT_SIGN, or configured login mode; no network operation was started")
         if getattr(config.option, "numprocesses", None):
             raise pytest.UsageError("Live terminal control must run serially; disable xdist")
     config.iot_run_dir = (Path(config.getoption("--iot-artifacts")) if config.getoption("--iot-artifacts")

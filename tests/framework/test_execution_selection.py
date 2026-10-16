@@ -16,8 +16,9 @@ def collect(tmp_path, args, extra_env=None):
     """只收集不执行，不建立网络连接；清除调用终端的额外 pytest 参数。"""
 
     env = {**os.environ, "PYTEST_ADDOPTS": "", "PYTHONIOENCODING": "utf-8"}
-    for key in ("IOT_TOKEN", "IOT_SIGN", "IOT_HDMI_VOLUME"):
+    for key in ("IOT_TOKEN", "IOT_SIGN", "IOT_HDMI_VOLUME", "IOT_AUTH_HAR", "IOT_USERNAME", "IOT_PASSWORD"):
         env.pop(key, None)
+    env.update({"IOT_USERNAME": "", "IOT_PASSWORD": ""})
     env.update(extra_env or {})
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", str(ROOT / "pyproject.toml"),
@@ -55,7 +56,9 @@ def test_execution_selection(tmp_path, args, expected):
     (["--env", "missing-environment"], "Environment file not found"),
     (["--env", "test", "--iot-config", "config/environments/test.toml"], "cannot be combined"),
     (["--iot-data", "old.json"], "were removed"),
-    (["--live"], "requires IOT_TOKEN and IOT_SIGN"),
+    (["--live"], "Live login requires"),
+    (["--live", "--env", "ts9260"], "Live login requires"),
+    (["--live", "--auth-har", "old-login-source.har"], "HAR login input was removed"),
 ])
 def test_invalid_selection_fails_explicitly(tmp_path, args, message):
     """无匹配、冲突、旧入口、缺失环境与凭据均明确报错。"""
@@ -70,3 +73,12 @@ def test_old_volume_override_is_not_silently_applied(tmp_path):
 
     result, _ = collect(tmp_path, [], {"IOT_HDMI_VOLUME": "25"})
     assert result.returncode == 4 and "were removed" in result.stderr
+
+
+def test_live_login_collection_accepts_account_credentials_without_static_tokens(tmp_path):
+    """收集阶段只检查输入已配置，不在此时发出登录请求。"""
+
+    result, nodes = collect(tmp_path, ["tests/websocket/test_hdmi_volume.py", "--env", "ts9260",
+                                      "--live"], {"IOT_USERNAME": "mock-user", "IOT_PASSWORD": "mock-password"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(nodes) == 1 and "hdmi_volume_10" in nodes[0]

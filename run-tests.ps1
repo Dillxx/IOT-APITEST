@@ -3,6 +3,7 @@ param(
     [switch]$Live,
     [string]$Env,
     [string]$Config,
+    [string]$AuthHar,
     [string[]]$TestPath = @('tests'),
     [ValidateSet('http', 'websocket')][string]$Protocol,
     [ValidateSet('normal', 'rejected', 'special')][string]$Category,
@@ -11,6 +12,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSBoundParameters.ContainsKey('AuthHar')) {
+    throw '-AuthHar was removed. Configure config/accounts.local.toml or IOT_USERNAME/IOT_PASSWORD.'
+}
 if ($PSBoundParameters.ContainsKey('Data')) {
     throw '-Data was removed. Edit data/<protocol>/<interface>.json and select -CaseId.'
 }

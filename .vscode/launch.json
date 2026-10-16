@@ -2,17 +2,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "调试 HDMI 接口（本地模拟）",
+            "name": "调试 HDMI 真机（TS-9260）",
             "type": "debugpy",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/Scripts/python.exe",
             "module": "pytest",
             "args": [
-                "tests/websocket/test_hdmi_volume.py",
+                "tests/websocket/test_hdmi_volume.py::test_set_volume_success[hdmi_volume_10]",
                 "-v",
                 "-s",
                 "--env",
-                "test",
+                "ts9260",
+                "--live",
                 "-o",
                 "addopts="
             ],

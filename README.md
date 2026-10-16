@@ -73,7 +73,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run-tests.ps1 -Protocol we
 
 HTTP 默认公共查询字段为 company/device_name/sign，来自已采集协议。可在 `[http.headers]` 和 `[http.params]` 中增加非敏感公共设置。HTTP cookies 和敏感 headers 通过 JSON 环境变量 `IOT_HTTP_COOKIES`、`IOT_HTTP_HEADERS` 提供。WS 握手支持 `[websocket.headers]`、`IOT_WS_HEADERS` 和 `IOT_WS_COOKIES`；这些与业务 JSON token/sign 分开。WS 业务公共字段从环境设置补齐，case 显式字段优先。
 
-实际设备仍需有效 `IOT_TOKEN` 和 `IOT_SIGN`，可另设 `IOT_WS_SIGN`，并显式 `-Live`。当前不包含自动账号登录/凭据获取。真机禁止 xdist 并行，不要启动多个进程控制同一终端。
+真机使用本机账号密码自动登录。填写 [config/accounts.local.toml](config/accounts.local.toml) 的 `[admin]` 表；实际私有文件已被 Git 忽略，可提交的空模板为 accounts.local.toml.example。管理员账号已由用户填写，属于整个云控平台，不与设备型号绑定。
+
+```toml
+[admin]
+username = ""
+password = ""
+```
+
+账号配置完成后，只需：
+
+```powershell
+.\run-tests.ps1 -Env ts9260 -Live -TestPath tests/websocket/test_hdmi_volume.py -CaseId hdmi_volume_10
+```
+
+每次启动：账号配置 → HTTP 接入鉴权 → 账户登录 → 保存到运行级 auth → HTTP/WS 自动携带。同一次运行只登录一次，Token 不保存到磁盘。用例需要直接传值时声明 `auth` 并使用 `auth.token`，也可声明 `token` 参数。
+
+HTTP 接入令牌单独保存在 auth.sign，账户会话 Token 为 auth.token，两者不能互换。环境变量 IOT_USERNAME/IOT_PASSWORD 可作为另一种账号来源，必须成对提供，避免与文件中的另一账号密码混用。
+
+日常运行不再支持从 HAR 读取账号，`-AuthHar`、`--auth-har`、`IOT_AUTH_HAR` 会提示移除。TS-9260 使用独立环境，原 TS-9220 配置不变。详细说明见 [authentication.md](docs/authentication.md)。
+
+HTTP 接入参数可通过 IOT_CLIENT_ID/IOT_CLIENT_SECRET 提供，未设置时从同源公开前端配置读取，不执行脚本。失败时明确报错，不猜测签名或自动重试密码。
+
+所有真机运行须显式 -Live。手动 Token 模式仍保留，普通运行推荐 login 模式和私有账号配置。真机禁止 xdist 并行，不要启动多个进程控制同一终端。
 
 ## 报告与调试
 

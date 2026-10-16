@@ -1,5 +1,5 @@
 """读取环境和设备配置，形成不可修改的 Settings 对象。
-服务器地址、设备身份从 TOML 读取；Token/sign 从环境变量读取；用例目标值由 testdata 提供。
+服务器和设备从 TOML 读取，账号从本机私有配置或环境变量读取；运行 Token 由认证前置提供。
 """
 
 from dataclasses import dataclass, field
@@ -47,6 +47,13 @@ class Settings:
     http_params: dict = field(default_factory=dict, repr=False)
     ws_headers: dict = field(default_factory=dict, repr=False)
     ws_cookies: dict = field(default_factory=dict, repr=False)
+    auth_mode: str = "manual"
+    auth_platform: str = "home"
+    account_file: str = field(default="", repr=False)
+    login_username: str = field(default="", repr=False)
+    login_password: str = field(default="", repr=False)
+    auth_client_id: str = field(default="", repr=False)
+    auth_client_secret: str = field(default="", repr=False)
 
 
 def load_settings(path: Path) -> Settings:
@@ -67,6 +74,25 @@ def load_settings(path: Path) -> Settings:
         device_config = tomllib.load(stream)
     server, device = raw["server"], device_config["device"]
     timeouts = raw["timeouts"]
+    auth = raw.get("auth", {})
+    account_path = path.parent / auth.get("account_file", "../accounts.local.toml")
+    account = {}
+    if account_path.is_file():
+        try:
+            with account_path.open("rb") as stream:
+                """本机账号文件不提交到仓库，不从 HAR 读取或迁移凭据。"""
+
+                accounts = tomllib.load(stream)
+            account = accounts.get(auth.get("account", "admin"), {})
+        except (OSError, tomllib.TOMLDecodeError):
+            raise ValueError("Cannot read private account configuration") from None
+        if not isinstance(account, dict):
+            raise ValueError("Private account section must be a table")
+    use_environment = "IOT_USERNAME" in os.environ or "IOT_PASSWORD" in os.environ
+    username = os.environ.get("IOT_USERNAME", "") if use_environment else account.get("username", "")
+    password = os.environ.get("IOT_PASSWORD", "") if use_environment else account.get("password", "")
+    if not isinstance(username, str) or not isinstance(password, str):
+        raise ValueError("Private account username/password must be strings")
     settings = Settings(
 
         # ** 将各配置字典展开为构造参数，合并不同来源的设置。
@@ -86,6 +112,13 @@ def load_settings(path: Path) -> Settings:
         http_params=raw.get("http", {}).get("params", {}),
         ws_headers={**raw.get("websocket", {}).get("headers", {}), **json.loads(os.environ.get("IOT_WS_HEADERS", "{}"))},
         ws_cookies=json.loads(os.environ.get("IOT_WS_COOKIES", "{}")),
+        auth_mode=auth.get("mode", "manual"),
+        auth_platform=auth.get("platform", "home"),
+        account_file=str(account_path.resolve()),
+        login_username=username,
+        login_password=password,
+        auth_client_id=os.environ.get("IOT_CLIENT_ID", ""),
+        auth_client_secret=os.environ.get("IOT_CLIENT_SECRET", ""),
     )
     for value in (settings.connect_timeout, settings.http_timeout,
                   settings.reply_timeout, settings.state_timeout,
@@ -96,4 +129,6 @@ def load_settings(path: Path) -> Settings:
         raise ValueError("history_limit must be at least 2")
     if settings.hdmi_min > settings.hdmi_max:
         raise ValueError("HDMI minimum cannot exceed maximum")
+    if settings.auth_mode not in {"manual", "login"}:
+        raise ValueError("Authentication mode must be manual or login")
     return settings

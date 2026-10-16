@@ -47,7 +47,16 @@ class HttpClient(httpx.AsyncClient):
         self.evidence.record("http_response", status=response.status_code,
                              url=safe_url(str(response.url)), headers=dict(response.headers))
         try:
-            self.evidence.record("http_body", body=response.json())
+            body = response.json()
+            if request.url.path == "/api/login/login" and isinstance(body, dict):
+                data = body.get("data")
+                if isinstance(data, dict):
+                    content = data.get("data")
+                    if request.method == "POST" and isinstance(content, str):
+                        body = {**body, "data": {**data, "data": "[REDACTED]"}}
+                    elif isinstance(content, dict) and "userinfo" in content:
+                        body = {**body, "data": {**data, "data": {**content, "userinfo": "[REDACTED]"}}}
+            self.evidence.record("http_body", body=body)
         except (ValueError, httpx.ResponseNotRead):
             self.evidence.record("http_body", body="<non-JSON or streaming body>")
         return response

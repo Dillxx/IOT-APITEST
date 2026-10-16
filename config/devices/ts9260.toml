@@ -1,0 +1,12 @@
+[device]
+mac = "30:3a:ba:15:7b:ce"
+model = "TS-9260"
+name = "TS-9260"
+
+[capabilities]
+hdmi_volume = true
+
+[hdmi]
+min = 0
+max = 100
+range_confirmed = false

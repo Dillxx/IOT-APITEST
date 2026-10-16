@@ -12,6 +12,7 @@ from api.http.device_list import DeviceListApi
 from api.websocket.hdmi import HdmiApi
 from api.websocket.session import SessionApi
 from common.evidence import Evidence
+from common.authentication import authenticate
 from common.http_client import HttpClient
 from common.setup import connect_ws, read_state, restore_hdmi, verify_device
 from common.websocket_client import WebSocketClient
@@ -24,6 +25,34 @@ def settings(pytestconfig):
     """一次运行选择一份环境；各接口客户端使用自己的设置副本。"""
 
     return load_settings(pytestconfig.iot_config_path)
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def authenticated_settings(request, settings):
+    """真机登录模式每次启动认证一次，令牌只保存在本次设置副本中。"""
+
+    if not request.config.getoption("--live") or settings.auth_mode != "login":
+        return settings
+    evidence = Evidence(request.config.iot_run_dir / "authentication")
+    evidence.phase = "authentication"
+    return await authenticate(settings, evidence)
+
+
+@pytest.fixture(scope="session")
+def auth(authenticated_settings, pytestconfig):
+    """本次运行共享的认证上下文，用例可直接使用 auth.token 和 auth.sign。"""
+
+    if not pytestconfig.getoption("--live"):
+        return replace(authenticated_settings, token="mock-token", sign="mock-sign",
+                       http_headers={**authenticated_settings.http_headers, "token": "mock-token"})
+    return authenticated_settings
+
+
+@pytest.fixture(scope="session")
+def token(auth):
+    """需要直接传 Token 的用例可声明 token 参数，值来自同一个运行级上下文。"""
+
+    return auth.token
 
 
 @pytest.fixture(scope="module")
@@ -64,9 +93,10 @@ async def simulator(request, settings):
 
 
 @pytest.fixture(scope="module")
-def connection_settings(settings, simulator):
+def connection_settings(auth, simulator):
     """模拟地址只覆盖当前接口，不改写环境文件。"""
 
+    settings = auth
     if simulator is None:
         return settings
     port = simulator.server.sockets[0].getsockname()[1]

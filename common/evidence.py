@@ -7,22 +7,36 @@ from pathlib import Path
 import json
 import logging
 import re
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 LOGGER = logging.getLogger(__name__)
 
 # 按常见字段名识别凭据，忽略大小写；普通业务字段仍然保留。
-SECRET = re.compile(r"^(token|sign|authorization|proxy-authorization|cookie|set-cookie|password|passwd|pwd|access_?token|refresh_?token|api[_-]?key|clientId)$", re.I)
+SECRET = re.compile(r"^(token|sign|authorization|proxy-authorization|cookie|set-cookie|password|passwd|pwd|access_?token|refresh_?token|api[_-]?key|clientId|client_id|client_secret|secret|usernum|userpassword|username)$", re.I)
+
+
+def sensitive_key(key):
+    """识别普通字段及 data[userpassword] 这样的表单字段。"""
+
+    parts = [part for part in re.split(r"[\[\].]", unquote(str(key))) if part]
+    return bool(parts and SECRET.fullmatch(parts[-1]))
 
 
 def redact(value):
     """递归复制字典和列表，替换敏感字段；不直接修改原报文。"""
 
     if isinstance(value, dict):
-        return {key: "[REDACTED]" if SECRET.match(str(key)) else redact(item)
+        return {key: "[REDACTED]" if sensitive_key(key) else redact(item)
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [redact(item) for item in value]
+    if isinstance(value, str) and value.lstrip().startswith(("{", "[")):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, (dict, list)):
+                return json.dumps(redact(parsed), ensure_ascii=False, separators=(",", ":"))
+        except ValueError:
+            pass
     return value
 
 
@@ -35,7 +49,7 @@ def safe_url(url: str) -> str:
         host = f"[{host}]"
     if parts.port:
         host += f":{parts.port}"
-    query = urlencode([(key, "[REDACTED]" if SECRET.match(key) else val)
+    query = urlencode([(key, "[REDACTED]" if sensitive_key(key) else redact(val))
                        for key, val in parse_qsl(parts.query, keep_blank_values=True)])
 
     # host 不含原 URL 用户名密码，最后的空字符串去掉片段部分。
