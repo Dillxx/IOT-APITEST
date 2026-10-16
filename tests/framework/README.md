@@ -1,3 +1,3 @@
 # 框架回归
 
-test_stability.py 检查消息顺序、超时、断线、串行、心跳和脱敏；test_fixture_lifecycle.py 用独立 pytest 进程检查失败后的恢复与关闭；test_architecture.py 保留客户端不依赖测试的基本边界。
+独立模拟检查乱序、旧消息、断线、超时、共享连接、每条恢复、HTTP 参数和脱敏、选择执行及环境配置。故障注入不使用真实设备。

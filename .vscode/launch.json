@@ -2,21 +2,85 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "调试 HDMI 用例（本地模拟）",
+            "name": "调试 HDMI 接口（本地模拟）",
             "type": "debugpy",
             "request": "launch",
             "python": "${workspaceFolder}/.venv/Scripts/python.exe",
             "module": "pytest",
             "args": [
-                "tests/audio/test_9220_hdmi.py::test_9220_hdmi_volume",
+                "tests/websocket/test_hdmi_volume.py",
                 "-v",
                 "-s",
+                "--env",
+                "test",
                 "-o",
-                "addopts=",
-                "--iot-config",
-                "${workspaceFolder}/config/environments/test.toml",
-                "--iot-data",
-                "${workspaceFolder}/testdata/audio/hdmi.json"
+                "addopts="
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTEST_ADDOPTS": ""
+            }
+        },
+        {
+            "name": "调试 HTTP 接口（本地模拟）",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "module": "pytest",
+            "args": [
+                "tests/http/test_device_list.py",
+                "-v",
+                "-s",
+                "--env",
+                "test",
+                "-o",
+                "addopts="
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTEST_ADDOPTS": ""
+            }
+        },
+        {
+            "name": "调试关联流程（本地模拟）",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "module": "pytest",
+            "args": [
+                "tests/workflows/test_hdmi_control_flow.py",
+                "-v",
+                "-s",
+                "--env",
+                "test",
+                "-o",
+                "addopts="
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTEST_ADDOPTS": ""
+            }
+        },
+        {
+            "name": "调试当前接口文件（本地模拟）",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "-s",
+                "--env",
+                "test",
+                "-o",
+                "addopts="
             ],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",

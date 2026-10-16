@@ -1,83 +1,187 @@
-"""公共运行配置和设备工厂；不放 HDMI 数据或音量恢复逻辑。"""
-from contextlib import AsyncExitStack
+"""共享连接按接口文件管理，每条 case 独立标记日志与恢复状态。"""
+
+from copy import copy
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
-import os
-import uuid
+
+import httpx
 import pytest
-from clients.device import DeviceClient
+import pytest_asyncio
+
+from common.evidence import Evidence
+from common.http_client import HttpClient
+from common.setup import read_state, restore_hdmi, verify_device
+from common.websocket_client import WebSocketClient
 from config.settings import load_settings
 from mocks.device_server import MockDevice
-from support.evidence import Evidence
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
-def pytest_addoption(parser):
-    """pytest 启动时注册项目参数；运行脚本只是把这些参数传给 pytest。"""
-    parser.addoption("--live", action="store_true", help="Run the HDMI business case against a real terminal")
-    parser.addoption("--iot-config", default=str(ROOT / "config" / "environments" / "test.toml"), help="Environment TOML")
-    parser.addoption("--iot-data", default=str(ROOT / "testdata" / "audio" / "hdmi.json"), help="HDMI test input JSON")
-    parser.addoption("--iot-artifacts", default=None, help="Unique directory for this run's evidence")
+@pytest.fixture(scope="session")
+def settings(pytestconfig):
+    """一次运行选择一份环境；各接口客户端使用自己的设置副本。"""
+
+    return load_settings(pytestconfig.iot_config_path)
 
 
-def pytest_configure(config):
-    """在执行用例前检查真机凭据和并行限制，并确定本次证据目录。"""
-    if config.getoption("--live"):
-        # 在准备网络连接前检查凭据，缺失时不会访问真机。
-        if not os.environ.get("IOT_TOKEN") or not os.environ.get("IOT_SIGN"):
-            raise pytest.UsageError("--live requires IOT_TOKEN and IOT_SIGN environment variables; no credentials are stored in the project")
-        if getattr(config.option, "numprocesses", None):
-            raise pytest.UsageError("Live terminal control must run serially; disable xdist")
-    config.iot_run_dir = (Path(config.getoption("--iot-artifacts"))
-                          if config.getoption("--iot-artifacts") else ROOT / "artifacts" / (
-        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]))
+@pytest.fixture(scope="module")
+def interface_evidence(request):
+    """每接口文件保留完整流量，日志同时包含当前 case ID 和阶段。"""
+
+    root = Path(__file__).resolve().parents[1]
+    relative = Path(request.module.__file__).relative_to(root).with_suffix("")
+    return Evidence(request.config.iot_run_dir / relative)
 
 
-def pytest_report_header(config):
-    """在控制台展示本地/真机模式和证据位置，方便确认这次运行的范围。"""
-    mode = "LIVE: physical terminal commands enabled" if config.getoption("--live") else "LOCAL SIMULATOR: no physical terminal commands"
-    return [mode, f"Evidence: {config.iot_run_dir}"]
+@pytest.fixture(autouse=True)
+def case_context(request, interface_evidence):
+    """跨后台接收任务共享可变的日志上下文，不依赖任务局部变量。"""
+
+    interface_evidence.case_id = request.node.nodeid
+    interface_evidence.phase = "setup"
+    interface_evidence.record("case_start")
+    yield
+    interface_evidence.record("case_end")
+    interface_evidence.case_id = None
+    interface_evidence.phase = "connection"
 
 
-@pytest.fixture
-def settings(request):
-    """fixture：按 --iot-config 读取设置，pytest 会自动把结果传入需要它的 fixture。"""
-    return load_settings(Path(request.config.getoption("--iot-config")))
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def simulator(request, settings):
+    """每个接口文件一台模拟器；真机模式不启动模拟服务。"""
+
+    if request.config.getoption("--live"):
+        yield None
+        return
+    device = MockDevice(settings.mac, settings.model)
+    await device.start()
+    try:
+        yield device
+    finally:
+        await device.close()
 
 
-@pytest.fixture
-def evidence(request):
-    """fixture：以本次运行目录和用例名创建独立证据记录器。"""
-    name = request.node.name.replace("/", "_").replace("\\", "_").replace(":", "_")
-    return Evidence(request.config.iot_run_dir / name)
+@pytest.fixture(scope="module")
+def connection_settings(settings, simulator):
+    """模拟地址只覆盖当前接口，不改写环境文件。"""
+
+    if simulator is None:
+        return settings
+    port = simulator.server.sockets[0].getsockname()[1]
+    return replace(settings, ws_url=f"ws://127.0.0.1:{port}", http_base_url="http://mock.local",
+                   token="mock-token", sign="mock-sign", ws_sign="mock-ws-sign")
 
 
-@pytest.fixture
-async def device_factory(request, settings, evidence):
-    """提供已核对并登录的客户端；退出时按相反顺序关闭设备连接和模拟服务。
-    异常测试可注入 behavior/配置覆盖；业务测试由局部 fixture 调用。
-    """
-    async with AsyncExitStack() as resources:
-        async def create(behavior=None, live=False, **overrides):
-            if live and not request.config.getoption("--live"):
-                raise pytest.UsageError("Live device creation requires explicit --live")
-            current = replace(settings, **overrides)
-            simulator = None
-            if not live:
-                simulator = MockDevice(current.mac, current.model, behavior)
-                ws_url = await simulator.start()
-                resources.push_async_callback(simulator.close)
-                current = replace(current, ws_url=ws_url, token="mock-token",
-                                  sign="mock-sign", http_base_url="http://mock.local")
-            device = DeviceClient(current, evidence,
-                                  simulator.http_transport() if simulator else None)
-            # 模拟器只用于本地故障测试检查，不是业务调用链中的容器。
-            device.simulator = simulator
-            resources.push_async_callback(device.close)
-            await device.verify_device()
-            await device.open()
-            return device
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def http_connection(connection_settings, simulator, interface_evidence):
+    """同接口共享 HTTPX 客户端和会话，接口结束时关闭连接池。"""
 
-        yield create
+    client = HttpClient(connection_settings, interface_evidence,
+                        simulator.http_transport() if simulator else None)
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+@pytest_asyncio.fixture(loop_scope="module")
+async def http(http_connection, case_context):
+    """复用连接，同时隔离各 case 对默认 headers/cookies/params 的修改。"""
+
+    headers = httpx.Headers(http_connection.headers)
+    cookies = httpx.Cookies()
+    for cookie in http_connection.cookies.jar:
+        cookies.jar.set_cookie(copy(cookie))
+    params = http_connection.params
+    try:
+        yield http_connection
+    finally:
+        http_connection.headers = headers
+        http_connection.cookies = cookies
+        http_connection.params = params
+
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
+async def ws_connection(http_connection, connection_settings, interface_evidence):
+    """同接口共享 WS；不确定结果后仅在重连核对原状态一致时允许后续测试。"""
+
+    current = None
+
+    async def acquire():
+        """健康连接直接复用，失效连接不重放命令。"""
+
+        nonlocal current
+        if current and not current.failure and not current.closing and not current.control_uncertain:
+            return current
+        needs_recovery = current is not None and current.control_uncertain
+        reference = getattr(current, "recovery_volume", None)
+        if current:
+            await current.close()
+        await verify_device(http_connection, connection_settings)
+        current = WebSocketClient(connection_settings, interface_evidence)
+        await current.open()
+        if needs_recovery:
+            state = await read_state(current)
+            if reference is None or type(state.get("HDMI_audio_status")) is not int or state["HDMI_audio_status"] != reference:
+                current.control_uncertain = True
+                current.recovery_volume = reference
+                await current.close()
+                pytest.fail("Previous control outcome uncertain; current state differs from baseline. Check device manually")
+        return current
+
+    try:
+        yield acquire
+    finally:
+        if current:
+            await current.close()
+
+
+@pytest_asyncio.fixture(loop_scope="module")
+async def ws(ws_connection, case_context):
+    """提供可直接 request 的已登录连接；不隐藏任何业务用例的操作断言。"""
+
+    return await ws_connection()
+
+
+@pytest_asyncio.fixture(loop_scope="module")
+async def initial_state(ws, connection_settings):
+    """改状态的测试按需使用此 fixture，每条子用例分别记录和恢复原值。"""
+
+    before = await read_state(ws)
+    if not connection_settings.supports_hdmi:
+        pytest.fail("Configured device does not support HDMI volume")
+    original = before["HDMI_audio_status"]
+    if type(original) is not int or not connection_settings.hdmi_min <= original <= connection_settings.hdmi_max:
+        pytest.fail("Cannot safely restore the original HDMI volume; original value invalid")
+    ws.initial_state = before
+    ws.recovery_volume = original
+    ws.evidence.record("checkpoint", operation="baseline", state=before)
+    try:
+        yield before
+    finally:
+        if connection_settings.restore_original:
+            await restore_hdmi(ws, original)
+
+
+@pytest_asyncio.fixture(loop_scope="module")
+async def isolated_http(connection_settings, simulator, interface_evidence, case_context):
+    """身份切换等特殊测试独立创建客户端，不污染普通接口共享会话。"""
+
+    client = HttpClient(connection_settings, interface_evidence,
+                        simulator.http_transport() if simulator else None)
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+@pytest_asyncio.fixture(loop_scope="module")
+async def isolated_ws(isolated_http, connection_settings, interface_evidence):
+    """登录和断线测试使用独立连接；不进行普通 HDMI 状态恢复。"""
+
+    await verify_device(isolated_http, connection_settings)
+    connection = WebSocketClient(connection_settings, interface_evidence)
+    try:
+        await connection.open()
+        yield connection
+    finally:
+        await connection.close()

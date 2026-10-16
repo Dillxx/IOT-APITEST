@@ -1,38 +1,51 @@
-﻿# Windows 运行入口：默认本地模拟，只有 -Live 才启用真机控制。
-# Config 指定环境，Data 指定参数数据，TestPath 可缩小本次执行范围。
+﻿# 统一运行入口；环境、协议、文件、类别和数据 ID 可组合筛选。
 param(
     [switch]$Live,
-    [string]$Config = (Join-Path $PSScriptRoot 'config\environments\test.toml'),
-    [string]$Data = (Join-Path $PSScriptRoot 'testdata\audio\hdmi.json'),
-    [string]$TestPath = 'tests'
+    [string]$Env,
+    [string]$Config,
+    [string[]]$TestPath = @('tests'),
+    [ValidateSet('http', 'websocket')][string]$Protocol,
+    [ValidateSet('normal', 'rejected', 'special')][string]$Category,
+    [string[]]$CaseId,
+    [string]$Data
 )
 
 $ErrorActionPreference = 'Stop'
-# 使用项目独立环境，避免误用系统 Python 或其他项目的依赖。
+if ($PSBoundParameters.ContainsKey('Data')) {
+    throw '-Data was removed. Edit data/<protocol>/<interface>.json and select -CaseId.'
+}
+if ($Env -and $Config) {
+    throw '-Env and -Config cannot be combined.'
+}
+if (-not $Live -and $env:PYTEST_ADDOPTS -match '(^|\s)--live(\s|$)') {
+    throw 'Implicit --live in PYTEST_ADDOPTS is not allowed. Pass -Live explicitly.'
+}
+
+# 固定使用项目虚拟环境，不依赖系统 Python 或终端是否激活环境。
 $pythonExe = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $pythonExe)) {
-    throw 'Missing .venv. Create it with Python 3.12+ and install requirements.lock; see README.md.'
+    throw 'Missing .venv. Create Python 3.12+ environment and install requirements.lock.'
 }
-# 时间加随机编号，为每次运行建立独立目录，避免覆盖历史证据。
 $runName = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + ([guid]::NewGuid().ToString('N').Substring(0, 8))
 $runDirectory = Join-Path $PSScriptRoot ('artifacts\' + $runName)
-New-Item -ItemType Directory -Path $runDirectory | Out-Null
-# 向 pytest 传入参数，JUnit 报告与逐用例 JSONL 使用同一个运行目录。
-$testArguments = @('-m', 'pytest', $TestPath, '--iot-config', $Config, '--iot-data', $Data,
-    '--iot-artifacts', $runDirectory, '--junitxml', (Join-Path $runDirectory 'junit.xml'))
-if ($Live) {
-    $testArguments += '--live'
-}
+$testArguments = @('-m', 'pytest') + $TestPath + @(
+    '--iot-artifacts', $runDirectory,
+    '--junitxml', (Join-Path $runDirectory 'junit.xml')
+)
+if ($Env) { $testArguments += @('--env', $Env) }
+if ($Config) { $testArguments += @('--iot-config', $Config) }
+if ($Protocol) { $testArguments += @('--protocol', $Protocol.ToLowerInvariant()) }
+if ($Category) { $testArguments += @('--category', $Category.ToLowerInvariant()) }
+foreach ($id in $CaseId) { $testArguments += @('--case-id', $id) }
+if ($Live) { $testArguments += '--live' }
+
+# 切到项目根目录运行，结束后恢复原工作目录并返回真实退出码。
 Push-Location $PSScriptRoot
 try {
-    # @testArguments 展开数组为命令参数，无需手工拼接带空格的文件路径。
     & $pythonExe @testArguments
     $testExitCode = $LASTEXITCODE
 } finally {
-    # 测试成功或失败都要恢复执行脚本之前的工作目录。
     Pop-Location
 }
 Write-Host "Run artifacts: $runDirectory"
-# 返回 pytest 的退出码，让终端或流水线正确识别测试失败。
 exit $testExitCode
-

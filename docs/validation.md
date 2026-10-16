@@ -1,40 +1,49 @@
-﻿# 结构简化验证记录
+# 接口组织重构验收
 
-验证日期：2026-10-16。Windows、Python 3.12.14、pytest 9.1.1。沿用 requirements.lock，未升级依赖。
+日期：2026-10-16。Python 3.12.14、pytest 9.1.1，依赖锁未改变。本次只使用本地模拟，没有执行真机控制。
 
-## 调整结果
-
-- 用例只保留操作和验证；登录、原状态记录、恢复、资源关闭由 fixture 管理。
-- Harness、HdmiApi、DeviceApi、DeviceSession 合并为直接使用的 DeviceClient。
-- 原 api/protocol/core/flows 和单独断言层已合并；HTTP 和 WS 保留必要的传输职责边界。
-- Python 文件由 47 减少到 22，包含包标记和原占位目录，不代表业务逻辑减少一半。
-- 全局 conftest 不再包含 HDMI 数据钩子和音量恢复；数据绑定在测试文件，前后置在 audio/conftest.py。
-- Windows PowerShell 5 脚本补充 UTF-8 BOM，避免中文编码导致解析失败。未修改系统执行策略；本次通过进程级 ExecutionPolicy Bypass 验证。
-
-## 验证结果
+## 结果
 
 | 检查 | 结果 |
 |---|---|
-| 调整前完整回归 | 20 passed |
-| 重构后保留原回归 | 20 passed |
-| 新增前后置失败恢复检查后 | 22 passed |
-| run-tests.ps1 完整入口 | 22 passed |
-| Python 开发模式、asyncio 调试 | 22 passed |
+| 重构前基线 | 22 passed |
+| 统一 run-tests.ps1 完整入口 | 53 passed |
+| Python 开发模式、asyncio 调试 | 53 passed |
+| 实际脚本：环境＋协议＋类别＋数据 ID | 1 passed |
+| 实际脚本：HTTP/WS 多文件＋多个 ID | 2 passed |
+| 实际脚本：显式配置文件＋混合流程 | 1 passed |
 | pip check | No broken requirements found |
-| 两条 JSON 数据 10/20 | 2 passed，分别恢复原音量 30 |
-| IOT_HDMI_VOLUME=25 覆盖 | 通过，源 JSON 未修改 |
-| 布尔值误作音量 | 收集阶段明确拒绝 |
-| --live 缺少凭据 | 网络操作前退出，返回码 4 |
-| 旧模块导入与语法检查 | 未发现旧导入，Python 语法可解析 |
+| 中文注释和三引号说明排版 | 29 个 Python 文件检查通过 |
+| 旧模块导入、四种调试配置路径 | 检查通过 |
+| HDMI/关联流程的实际请求证据 | 发送 10 后恢复 30，恢复检查点存在 |
+| HTTP 到 WS 的结果传递 | 流程中实际使用 HTTP 返回的 MAC 发出 WS 登录 |
 
-新增生命周期回归启动独立 pytest 探针：业务断言失败后仍恢复；恢复被拒绝时报告 teardown error，仍关闭资源。探针中的故意失败由外层测试检查，完整回归为通过。
+53 项包含 3 条正式接口/流程用例和 50 项框架回归，不表示增加了 53 条业务协议预期。
 
-完整报告：[junit.xml](../artifacts/20261016-092308-55518390/junit.xml)。
+## 关键回归
 
-多数据报告：[multi.xml](../artifacts/simplification-validation/multi.xml)。
+- 同接口两组数据复用一个 HTTP/WS 连接，每组分别恢复原音量；默认 cookie/header 修改不会影响下一组。
+- 控制确认与状态推送可乱序，旧回包不能满足新请求，日志和心跳不会被错误消费。
+- 拒绝回包、HTTP 4xx/5xx 原样返回给用例；模拟负数、小数仅验证公共层不擅自拦截输入。
+- 业务断言失败后恢复；恢复拒绝明确报告并关闭资源。
+- 不确定控制后重连，仅原状态一致才允许后续 case；状态已改变时不自动恢复或重发。
+- 独立特殊连接关闭不破坏普通共享连接；握手 cookies/headers 与业务凭据脱敏。
+- 协议、文件、类别、精确 ID、多 ID、环境冲突、无匹配、旧参数和缺失凭据均验证。
 
-额外检查汇总：[summary.json](../artifacts/simplification-validation/summary.json)。
+## 可追溯报告
 
-重构前源码快照：[before-simplification-20261016-091934.zip](../artifacts/before-simplification-20261016-091934.zip)。其中不包含 .venv、历史 artifacts 和 IDE 缓存；原项目无 Git 仓库。
+完整报告：[junit.xml](../artifacts/20261016-120048-bd3b4858/junit.xml)。
 
-本次全部使用本地模拟，没有执行真实设备控制。报告状态不等于物理声音效果；服务器到终端 TCP 行为仍未验证。
+调试模式：[asyncio-debug.xml](../artifacts/interface-refactor-validation/asyncio-debug.xml)。
+
+多接口：[junit.xml](../artifacts/20261016-120213-2a2bea09/junit.xml)。
+
+验收汇总：[summary.json](../artifacts/interface-refactor-validation/summary.json)。
+
+修改前源码快照：[ZIP](../artifacts/before-interface-refactor-20261016-114629.zip)。原历史报告及早期快照均保留。
+
+## 待确认边界
+
+正式 HDMI 数据仍为音量 10。0、1、99、100、101、-1、1.5 等的真实接受、拒绝、限幅或取整规则未全部确认，本次未据模拟器补造正式预期。
+
+自动账号登录、有效凭据获取、真机物理声音效果、服务器到终端 TCP 行为未验证。当前业务 JSON 登录沿用已采集协议。

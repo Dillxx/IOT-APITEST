@@ -1,0 +1,12 @@
+{
+  "normal": [
+    {
+      "id": "http_to_ws_hdmi_10",
+      "request": {
+        "list_params": {"actioncode": "get_lists", "data": "{\"status\":0,\"is_page\":0}"},
+        "volume": 10
+      },
+      "expected": {"http_status": 200, "result": 200, "return": 0, "volume": 10}
+    }
+  ]
+}

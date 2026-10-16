@@ -1,0 +1,14 @@
+{
+  "normal": [
+    {
+      "id": "hdmi_volume_10",
+      "request": {"data": 10},
+      "expected": {
+        "return": 0,
+        "data": 10,
+        "state": {"HDMI_audio_status": 10},
+        "other_audio_unchanged": true
+      }
+    }
+  ]
+}

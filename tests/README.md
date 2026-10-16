@@ -1,3 +1,3 @@
-# 测试
+# 接口测试
 
-业务用例在 audio，前后置在对应目录 conftest.py。全局 conftest 只管理公共配置和设备创建。framework 验证乱序、超时、断线、脱敏和生命周期。
+http/websocket 按协议放接口脚本，workflows 放跨接口流程，framework 验证公共能力。数据在独立的 data 对应目录；前后置在 conftest.py。

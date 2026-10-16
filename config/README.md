@@ -1,5 +1,3 @@
-# config
+# 环境与设备
 
-环境与设备配置，以及设置加载。用例输入归 testdata，凭据通过环境变量提供。
-
-完整职责、数据归属和开发规则参见项目 docs/architecture.md、docs/development.md、docs/reading-and-writing.md。
+环境 TOML 放 environments，设备身份与能力放 devices。用 -Env 选环境名或 -Config 指定文件，不可同时使用。测试输入/预期在 data，敏感凭据从环境变量提供。

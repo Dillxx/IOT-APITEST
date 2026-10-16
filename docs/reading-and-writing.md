@@ -1,31 +1,33 @@
-# 如何阅读和新增测试
+# 阅读和新增用例
 
-## 阅读顺序
+## 最短阅读路线
 
-1. tests/audio/test_9220_hdmi.py：看数据绑定、操作和通过条件。
-2. testdata/audio/hdmi.json：看本次输入与期望。
-3. tests/audio/conftest.py：需要了解前后置时再看原状态和恢复。
-4. clients/device.py：需要了解报文时，搜索 set_volume 或 query_state。
-5. clients/websocket.py / http.py：仅在排查收发、超时和连接问题时阅读。
+1. 打开 tests/http 或 tests/websocket 下的目标接口文件，看请求和断言。
+2. 打开 data 中相同协议和接口名的 JSON，看当前输入和预期。
+3. 切换环境时看 config/environments 的 TOML。
+4. 需要排查前后置时看 tests/conftest.py 和 common/setup.py。
+5. 只有排查传输、匹配或超时时才进入 common/http_client.py 或 websocket_client.py。
 
-公共配置在 tests/conftest.py 和 config 中；日志在 artifacts。读一条业务用例不需要先学习所有基础模块。
+## 增加同类数据
 
-## 新增用例
+在现有 JSON 分组中追加 id/request/expected，相同测试函数会为每组数据独立运行。id 在本数据文件内唯一，建议包含接口名，便于跨接口筛选。
 
-- 相同操作、不同正常输入：在 JSON 的 cases 中追加记录，id 保持唯一。
-- 新的业务组合：在对应测试文件直接写操作与 assert；前后置由 fixture 提供。
-- 新增设备指令：先取得协议依据，在 clients/device.py 增加明确命名的操作；复用现有收发，不额外创建只转发一层的 API 类。
-- 需要不同准备或恢复：在相应业务目录添加局部 fixture；全项目确实共用的资源才进入 tests/conftest.py。
-- 简单断言直接写；复杂且出现多次的比较再提取，避免为了缩短测试行数隐藏业务预期。
+## 增加不同验证类型
 
-## hdmi_case 是怎样获得的
+同接口增加另一个具名函数，标记 `@pytest.mark.rejected` 或 `special`，显式加载对应 JSON 组。不要把所有正常、拒绝、特殊规则塞进一个 if/elif 执行器；没有明确预期的类别不生成空测试。
 
-测试文件中的 pytest_generate_tests 读取 `--iot-data` 指定的文件，调用 load_hdmi_cases，并明确执行 `metafunc.parametrize("hdmi_case", cases, ...)`。默认路径在 tests/conftest.py 的 pytest_addoption 中。
+## HTTP
 
-`metafunc` 是 pytest 传入的当前测试描述对象。它负责收集时绑定数据，不负责连接设备。
+请求路径直接写在测试，参数来自 case，公共地址/headers/cookies/params 来自环境。简单断言直接写。`await http.get/post(...)` 返回原始 Response，包括错误状态码。
 
-## 调试
+## WebSocket
 
-F5 使用 `.vscode/launch.json` 中的“调试 HDMI 用例（本地模拟）”。在 set_volume 行前观察输入，在其后观察 after；前后置也可以在 audio/conftest.py 中单独设断点。
+case 明确写出 actioncode，request 数据保持原类型。`request` 只负责对应回包，`wait_for_state` 只负责异步目标推送；需要主动查询时再明确发送查询。不要把任意下一条消息当作回包。
 
-默认只运行模拟器。模拟报告和实际物理效果是不同证据层级。
+改 HDMI 状态的模块通过 `pytest.mark.usefixtures("initial_state")` 使用准备和恢复，case 可读取 ws.initial_state 检查未改动的通道。每条数据都会恢复，不依赖上一条。
+
+## 编排与调试
+
+tests/workflows 下的一条测试就是完整流程。上游结果保存在局部变量中，断言通过后再传下游。只测下游时，创建依赖数据应放在 fixture，不能依赖另外一个 test 函数。
+
+VS Code F5 使用已配置的四种本地调试入口；也可在测试资源管理器选择单条数据执行/调试。代码前的断点在该行尚未执行时停住。

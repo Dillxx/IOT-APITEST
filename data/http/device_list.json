@@ -1,0 +1,9 @@
+{
+  "normal": [
+    {
+      "id": "device_list_online",
+      "request": {"params": {"actioncode": "get_lists", "data": "{\"status\":0,\"is_page\":0}"}},
+      "expected": {"status_code": 200, "result": 200, "status": "success", "online_status": 1}
+    }
+  ]
+}

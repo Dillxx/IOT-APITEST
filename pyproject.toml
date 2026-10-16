@@ -16,6 +16,12 @@ asyncio_default_fixture_loop_scope = "function"
 asyncio_default_test_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-markers = ["stability: local framework fault and lifecycle tests"]
+markers = [
+  "stability: local framework fault and lifecycle tests",
+  "normal: normal request cases",
+  "rejected: confirmed rejection cases",
+  "special: confirmed conversion or other special cases",
+  "workflow: linked HTTP/WebSocket business scenarios",
+]
 filterwarnings = ["error"]
 
