@@ -1,0 +1,12 @@
+[device]
+mac = "30:3a:ba:11:e9:47"
+model = "TS-9220"
+name = "TS-9220-1"
+
+[capabilities]
+hdmi_volume = true
+
+[hdmi]
+min = 0
+max = 100
+range_confirmed = false  # Provisional guard; protocol boundaries not independently confirmed.

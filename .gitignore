@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+artifacts/*
+!artifacts/.gitkeep
+.env
+config/*.local.toml
+config/**/*.local.toml
+

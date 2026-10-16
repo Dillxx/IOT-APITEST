@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {
+      "id": "hdmi_set_10",
+      "target_volume": 10,
+      "expected_volume": 10,
+      "other_audio_unchanged": true
+    }
+  ]
+}
