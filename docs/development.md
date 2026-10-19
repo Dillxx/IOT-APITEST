@@ -25,7 +25,7 @@ HTTP 不自动断言状态码或业务字段。WS 不预先拒绝待测业务参
 
 数据层只检查分组、唯一 id、request/expected 对象。负数、小数、空值、字符串均可作为测试输入。实际协议预期未确认的不作为正式通过/失败 case。
 
-凭据只从环境变量取得；headers/cookies/body/URL 日志脱敏。环境选择不改变测试预期，不再接受 IOT_HDMI_VOLUME 隐藏覆盖。
+登录账号从 Git 忽略的 `config/accounts.local.toml` 的 `[admin]` 读取，是平台全局管理员；成对的 `IOT_USERNAME`/`IOT_PASSWORD` 可覆盖本地配置。运行时登录取得的 token 仅在本次测试进程中共享，不写入任务记录或其他文件，不依赖 HAR。headers/cookies/body/URL 日志脱敏。环境选择不改变测试预期，不再接受 IOT_HDMI_VOLUME 隐藏覆盖。
 
 ## 验证
 
